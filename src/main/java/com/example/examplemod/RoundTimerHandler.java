@@ -1,4 +1,4 @@
-package com.example.matchsystem;
+package com.example.examplemod;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
