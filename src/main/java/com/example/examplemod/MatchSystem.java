@@ -1,4 +1,4 @@
-package com.example.matchsystem;
+package com.example.examplemod;
 
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
