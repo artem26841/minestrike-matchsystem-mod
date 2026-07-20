@@ -79,7 +79,10 @@ public class RoundManager {
         book.setTag(tag);
 
         for (ServerPlayer player : ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayers()) {
-            if (player.hasPermission(2)) player.getInventory().add(book.copy());
+            // ИСПРАВЛЕНО: Используем корректный метод уровня оператора для ServerPlayer в 1.20.1
+            if (player.getServer().getPlayerList().isOp(player.getGameProfile())) {
+                player.getInventory().add(book.copy());
+            }
         }
     }
 
@@ -92,9 +95,18 @@ class StatsManager {
     private static final Map<UUID, Integer> playerKills = new HashMap<>();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    public static void addKill(UUID uuid) { playerKills.put(uuid, playerKills.getOrDefault(uuid, 0) + 1); }
-    public static int getKills(UUID uuid) { return playerKills.getOrDefault(uuid, 0); }
-    public static void resetStats() { playerKills.clear(); saveStatsToFile(); }
+    public static void addKill(UUID uuid) {
+        playerKills.put(uuid, playerKills.getOrDefault(uuid, 0) + 1);
+    }
+
+    public static int getKills(UUID uuid) {
+        return playerKills.getOrDefault(uuid, 0);
+    }
+
+    public static void resetStats() {
+        playerKills.clear();
+        saveStatsToFile();
+    }
 
     public static void saveStatsToFile() {
         File configFile = new File(FMLPaths.CONFIGDIR.get().toFile(), "matchsystem/session.json");
@@ -107,7 +119,9 @@ class StatsManager {
         MatchSystem.BLUE_TEAM.forEach(uuid -> addPlayerStat(playersJson, uuid, "BLUE"));
 
         rootJson.add("players_statistics", playersJson);
-        try (FileWriter writer = new FileWriter(configFile)) { GSON.toJson(rootJson, writer); } catch (IOException ignored) {}
+        try (FileWriter writer = new FileWriter(configFile)) {
+            GSON.toJson(rootJson, writer);
+        } catch (IOException ignored) {}
     }
 
     private static void addPlayerStat(JsonObject json, UUID uuid, String team) {
