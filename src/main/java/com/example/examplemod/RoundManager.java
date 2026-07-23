@@ -3,10 +3,18 @@ package com.example.examplemod;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.projectile.FireworkRocketEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.server.ServerLifecycleHooks;
@@ -44,19 +52,35 @@ public class RoundManager {
 
     public static void endRound(String winningTeam, String endReason) {
         MatchSystem.isRoundActive = false;
-        if (winningTeam.equalsIgnoreCase("t")) MatchSystem.tPoints++;
-        else if (winningTeam.equalsIgnoreCase("ct")) MatchSystem.ctPoints++;
+        String titleText = "";
+        int fireworkColor = 0; // 0 = Красный (Т), 1 = Синий (СТ)
+
+        if (winningTeam.equalsIgnoreCase("t")) {
+            MatchSystem.tPoints++;
+            titleText = "§c§lTERRORISTS WIN";
+            fireworkColor = 0;
+        } else if (winningTeam.equalsIgnoreCase("ct")) {
+            MatchSystem.ctPoints++;
+            titleText = "§b§lCOUNTER-TERRORISTS WIN";
+            fireworkColor = 1;
+        }
 
         StatsManager.saveStatsToFile();
         broadcastMessage("§6=================================\n§e§lROUND OVER!\n" + endReason + "\n§7Score: §cT " + MatchSystem.tPoints + " §7| §b" + MatchSystem.ctPoints + " CT\n§6=================================");
 
+        // ВНЕДРЕНО: Вывод огромных надписей TITLE на весь экран
+        sendBigTitle(titleText, "§fScore: §c" + MatchSystem.tPoints + " §7- §b" + MatchSystem.ctPoints);
+
+        // ВНЕДРЕНО: Спавн праздничных салютов над победителями
+        spawnVictoryFireworks(winningTeam, fireworkColor);
+
         // Проверка лимита победных очков матча
         if (MatchSystem.tPoints >= MatchSystem.configMaxPoints) {
-            broadcastMessage("§c§l🏆 TERRORISTS WIN THE MATCH! 🏆");
+            sendBigTitle("§c§l🏆 TERRORISTS 🏆", "§fWON THE ENTIRE MATCH!");
             forceStopMatch();
             return;
         } else if (MatchSystem.ctPoints >= MatchSystem.configMaxPoints) {
-            broadcastMessage("§b§l🏆 COUNTER-TERRORISTS WIN THE MATCH! 🏆");
+            sendBigTitle("§b§l🏆 COUNTER-TERRORISTS 🏆", "§fWON THE ENTIRE MATCH!");
             forceStopMatch();
             return;
         }
@@ -65,6 +89,48 @@ public class RoundManager {
             RoundTimerHandler.freezeTimeLeft = MatchSystem.configFreezeTime;
             RoundTimerHandler.isFreezePeriod = true;
             startNewRound();
+        }
+    }
+
+    // Метод генерации салютов над игроками победной команды
+    private static void spawnVictoryFireworks(String team, int colorType) {
+        Set<UUID> targetTeam = team.equalsIgnoreCase("t") ? MatchSystem.T_TEAM : MatchSystem.CT_TEAM;
+        if (ServerLifecycleHooks.getCurrentServer() == null) return;
+        
+        for (UUID uuid : targetTeam) {
+            ServerPlayer p = ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayer(uuid);
+            if (p != null && p.isAlive()) {
+                p.getServer().execute(() -> {
+                    ItemStack fireworkStack = new ItemStack(Items.FIREWORK_ROCKET);
+                    CompoundTag tag = new CompoundTag();
+                    CompoundTag fireworks = new CompoundTag();
+                    ListTag explosions = new ListTag();
+                    CompoundTag explosion = new CompoundTag();
+                    
+                    explosion.putByte("Type", (byte) 1); // Большой взрыв
+                    explosion.putIntArray("Colors", new int[]{colorType == 0 ? 0xFF0000 : 0x0000FF}); // Красный или Синий
+                    explosion.putByte("Flicker", (byte) 1); // Мерцание
+                    
+                    explosions.add(explosion);
+                    fireworks.put("Explosions", explosions);
+                    fireworks.putByte("Flight", (byte) 1); // Высота полета
+                    tag.put("Fireworks", fireworks);
+                    fireworkStack.setTag(tag);
+
+                    // Спавним сущность салюта прямо на позиции игрока
+                    FireworkRocketEntity rocket = new FireworkRocketEntity(p.level(), p.getX(), p.getY() + 0.5, p.getZ(), fireworkStack);
+                    p.level().addFreshEntity(rocket);
+                });
+            }
+        }
+    }
+
+    // Метод отправки сетевых пакетов больших титров на экраны
+    private static void sendBigTitle(String mainTitle, String subTitle) {
+        for (ServerPlayer player : getMatchPlayers()) {
+            player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 60, 10)); // Время анимации
+            player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(mainTitle)));
+            player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(subTitle)));
         }
     }
 
