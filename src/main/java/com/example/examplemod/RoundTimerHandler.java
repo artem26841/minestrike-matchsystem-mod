@@ -1,7 +1,6 @@
 package com.example.examplemod;
 
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -17,8 +16,15 @@ public class RoundTimerHandler {
 
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
-        if (!MatchSystem.isModEnabled || MatchSystem.isPaused || !MatchSystem.isRoundActive) return;
+        if (!MatchSystem.isModEnabled || !MatchSystem.isMatchStarted) return;
+
         if (event.phase == TickEvent.Phase.END) {
+            // Постоянное отображение табло, пока идет матч
+            drawMatchHUD();
+
+            // Если на паузе или раунд не активен — время заморожено
+            if (MatchSystem.isPaused || !MatchSystem.isRoundActive) return;
+
             tickCounter++;
             if (tickCounter >= 20) {
                 tickCounter = 0;
@@ -31,35 +37,50 @@ public class RoundTimerHandler {
         if (isFreezePeriod) {
             if (freezeTimeLeft > 0) {
                 freezeTimeLeft--;
-                broadcastActionBar("§eВремя до старта: §c" + freezeTimeLeft + " сек");
             } else {
                 isFreezePeriod = false;
-                RoundManager.broadcastMessage("§c§lРАУНД НАЧАЛСЯ!");
+                RoundManager.broadcastMessage("§c§lROUND STARTED!");
             }
             return;
         }
 
         if (roundTimeLeft > 0) {
             roundTimeLeft--;
-            String timerColor = roundTimeLeft <= 10 ? "§c" : "§a";
-            broadcastActionBar("§cRED " + MatchSystem.redPoints + " §7| " + timerColor + formatTime(roundTimeLeft) + " §7| §b" + MatchSystem.bluePoints + " BLUE");
         } else {
-            RoundManager.endRound("blue", "§bВремя вышло! Победили Синие.");
+            RoundManager.endRound("ct", "§bTime Expired! CT Win.");
         }
+    }
+
+    private static void drawMatchHUD() {
+        String timerStr;
+        String timerColor = roundTimeLeft <= 10 && !isFreezePeriod ? "§c" : "§a";
+
+        if (MatchSystem.isPaused) {
+            timerStr = "§c§lPAUSED";
+        } else if (!MatchSystem.isRoundActive) {
+            timerStr = "§7WAITING";
+        } else if (isFreezePeriod) {
+            timerStr = "§eFREEZE: " + freezeTimeLeft + "s";
+        } else {
+            timerStr = timerColor + formatTime(roundTimeLeft);
+        }
+
+        String hudText = "§c§lT §7[" + MatchSystem.tPoints + "] §7| " + timerStr + " §7| §7[" + MatchSystem.ctPoints + "] §b§lCT";
+
+        // Показываем табло ТОЛЬКО участникам команд матча
+        RoundManager.getMatchPlayers().forEach(p -> p.sendSystemMessage(Component.literal(hudText), true));
     }
 
     @SubscribeEvent
     public static void onPlayerDisconnect(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (!MatchSystem.isModEnabled || !MatchSystem.isRoundActive) return;
+        if (!MatchSystem.isModEnabled || !MatchSystem.isMatchStarted || !MatchSystem.isRoundActive) return;
         UUID uuid = event.getEntity().getUUID();
-        if (MatchSystem.RED_TEAM.contains(uuid) || MatchSystem.BLUE_TEAM.contains(uuid)) {
-            MatchSystem.isPaused = true;
-            RoundManager.broadcastMessage("§c[MineStrike] Игрок " + event.getEntity().getGameProfile().getName() + " вышел. Пауза!");
+        if (MatchSystem.T_TEAM.contains(uuid) || MatchSystem.CT_TEAM.contains(uuid)) {
+            if (!MatchSystem.isPaused) {
+                RoundManager.togglePause();
+                RoundManager.broadcastMessage("§c[MineStrike] Player " + event.getEntity().getGameProfile().getName() + " disconnected. MATCH PAUSED!");
+            }
         }
-    }
-
-    private static void broadcastActionBar(String text) {
-        RoundManager.getMatchPlayers().forEach(p -> p.sendSystemMessage(Component.literal(text), true));
     }
 
     private static String formatTime(int secs) {
