@@ -18,17 +18,25 @@ public class MatchSystem {
     public static final String MODID = "matchsystem";
     public static final Logger LOGGER = LogManager.getLogger();
 
-    public static final Set<UUID> RED_TEAM = new HashSet<>();
-    public static final Set<UUID> BLUE_TEAM = new HashSet<>();
+    public static final Set<UUID> T_TEAM = new HashSet<>();
+    public static final Set<UUID> CT_TEAM = new HashSet<>();
     public static final Set<UUID> SPECTATORS = new HashSet<>();
 
+    // Состояния мода и матча
     public static boolean isModEnabled = false;
+    public static boolean isMatchStarted = false; // Флаг /ms round startmatch
     public static boolean isRoundActive = false;
     public static boolean isPaused = false;
-    public static boolean isAutoMode = false;
+    public static boolean isAutoMode = false;     // Переключатель startauto
 
-    public static int redPoints = 0;
-    public static int bluePoints = 0;
+    // Настройки матча (сохраняются при on/off)
+    public static int configRoundTime = 115;
+    public static int configFreezeTime = 15;
+    public static int configMaxPoints = 16;
+
+    // Текущий счет
+    public static int tPoints = 0;
+    public static int ctPoints = 0;
 
     public MatchSystem() {
         MinecraftForge.EVENT_BUS.register(this);
@@ -41,8 +49,8 @@ public class MatchSystem {
     }
 
     public static void removeFromAllTeams(UUID uuid) {
-        RED_TEAM.remove(uuid);
-        BLUE_TEAM.remove(uuid);
+        T_TEAM.remove(uuid);
+        CT_TEAM.remove(uuid);
         SPECTATORS.remove(uuid);
     }
 
